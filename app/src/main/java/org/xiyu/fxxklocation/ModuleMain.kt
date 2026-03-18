@@ -97,14 +97,21 @@ private fun applySELinuxPolicy(): Boolean {
             }
 
             // No policy tool found — try magiskpolicy in PATH as last attempt
+            var anySuccess = false
             for (rule in rules) {
                 try {
-                    Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskpolicy --live \"$rule\"")).waitFor()
+                    val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "magiskpolicy --live \"$rule\""))
+                    val exit = p.waitFor()
+                    if (exit == 0) anySuccess = true
                 } catch (_: Throwable) {}
             }
-            selinuxPolicyPatched = true
-            log("[SEPOL] policy patched via generic magiskpolicy fallback")
-            return true
+            if (anySuccess) {
+                selinuxPolicyPatched = true
+                log("[SEPOL] policy patched via generic magiskpolicy fallback")
+                return true
+            }
+            log("[SEPOL] no policy tool found and fallback failed — SELinux may block service registration")
+            return false
         } catch (e: Throwable) {
             log("[SEPOL] policy patch failed: $e")
             return false
@@ -210,7 +217,7 @@ class ModuleMain : IXposedHookLoadPackage {
         if (sysHooked) return
         sysHooked = true
 
-        log("[SYS] v40 Installing immediate system_server hooks...")
+        log("[SYS] v41 Installing immediate system_server hooks...")
 
         // SELinux policy is patched from FL app process where su is reliable.
         // system_server (uid 1000) doesn't need su anymore.
@@ -227,32 +234,60 @@ class ModuleMain : IXposedHookLoadPackage {
                 val smClass = Class.forName("android.os.ServiceManager")
                 val getService = smClass.getMethod("getService", String::class.java)
 
-                // Poll for both services — process each as found
+                // Phase 1: Proactively register service_fl_ml — don't depend on FL's service_fl_xp.
+                // FL may never register service_fl_xp on some devices/ROMs (Android 16 / ColorOS / Samsung).
+                var mlReady = false
                 var secs = 0
-                var xpFound = false
-                var mlFound = false
-                while (!xpFound || !mlFound) {
-                    if (!xpFound) {
-                        val b = getService.invoke(null, "service_fl_xp") as? IBinder
-                        if (b != null) {
-                            xpFound = true
-                            log("[SYS] service_fl_xp poll found (${secs}s), class=${b.javaClass.name}")
-                            processServiceFlMlFinder(b)
+                while (!mlReady && secs < 120) {
+                    // Check if service_fl_ml already exists (from FL or hookServiceManagerAddService callback)
+                    val existing = getService.invoke(null, "service_fl_ml") as? IBinder
+                    if (existing != null) {
+                        mlReady = true
+                        log("[SYS] service_fl_ml already registered (${secs}s), class=${existing.javaClass.name}")
+                        processServiceFlMlFinder(existing)
+                        break
+                    }
+                    // No service yet — try to register our own
+                    if (ourMlBinder == null) {
+                        try {
+                            registerMockLocationService()
+                            if (ourMlBinder != null) {
+                                mlReady = true
+                                log("[SYS] service_fl_ml self-registered at ${secs}s")
+                                break
+                            }
+                        } catch (e: Throwable) {
+                            if (secs % 10 == 0) log("[SYS] service_fl_ml register attempt (${secs}s): ${e.message}")
                         }
+                    } else {
+                        mlReady = true
+                        break
                     }
-                    if (!mlFound) {
-                        val b = getService.invoke(null, "service_fl_ml") as? IBinder
-                        if (b != null) {
-                            mlFound = true
-                            log("[SYS] service_fl_ml poll found (${secs}s), class=${b.javaClass.name}")
-                            processServiceFlMlFinder(b)
-                        }
-                    }
-                    if (!xpFound || !mlFound) {
-                        Thread.sleep(1000); secs += 1
-                        if (secs % 30 == 0) log("[SYS] Waiting for FL services... (${secs}s) xp=$xpFound ml=$mlFound")
-                    }
+                    Thread.sleep(1000); secs += 1
+                    if (secs % 30 == 0) log("[SYS] Waiting to register service_fl_ml... (${secs}s)")
                 }
+                if (!mlReady) {
+                    log("[SYS] WARN: service_fl_ml not registered after 120s — SELinux policy may not be patched yet")
+                }
+
+                // Phase 2: Watch for service_fl_xp (optional — FL may or may not register it)
+                Thread {
+                    try {
+                        var xpSecs = 0
+                        while (xpSecs < 120) {
+                            val b = getService.invoke(null, "service_fl_xp") as? IBinder
+                            if (b != null) {
+                                log("[SYS] service_fl_xp found (${xpSecs}s), class=${b.javaClass.name}")
+                                processServiceFlMlFinder(b)
+                                break
+                            }
+                            Thread.sleep(2000); xpSecs += 2
+                        }
+                        if (xpSecs >= 120) log("[SYS] service_fl_xp not found after 120s (OK — not required)")
+                    } catch (e: Throwable) {
+                        log("[SYS] service_fl_xp poll error: $e")
+                    }
+                }.apply { name = "FL-XpPoll"; isDaemon = true }.start()
 
                 // ---- Periodic heartbeat so we can verify hook status ----
                 while (true) {
@@ -304,8 +339,10 @@ class ModuleMain : IXposedHookLoadPackage {
         }
 
         // This is FL's service_fl_ml binder (IMockLocationManager)
-        if (mlBinderHooked) return
-        mlBinderHooked = true
+        synchronized(this) {
+            if (mlBinderHooked) return
+            mlBinderHooked = true
+        }
         log("[SYS] service_fl_ml (IMockLocationManager) detected — installing hooks")
         val binderCl = binderCls.classLoader
         hookBinderAidlMethods(binderCls)
@@ -727,7 +764,7 @@ class ModuleMain : IXposedHookLoadPackage {
                         // Erased generics — DO NOT hook (could be List<CellInfo>/List<SubscriptionInfo>)
                         isStringList = false
                     }
-                } catch (e: Throwable) { isStringList = true }
+                } catch (e: Throwable) { isStringList = false /* Don't guess — could be List<CellInfo> */ }
 
                 if (isStringList) {
                     m.isAccessible = true
@@ -1295,8 +1332,7 @@ class ModuleMain : IXposedHookLoadPackage {
                             try {
                                 if (param.throwable != null) return
                                 val listener = param.args.firstOrNull { listenerCls.isInstance(it) }
-                                if (listener != null && !sysGnssListeners.contains(listener)) {
-                                    sysGnssListeners.add(listener)
+                                if (listener != null && sysGnssListeners.addIfAbsent(listener)) {
                                     log("[SYS-GNSS] captured listener via ${m.name} (total=${sysGnssListeners.size})")
                                     ensureSysGnssFeederRunning()
                                 }
@@ -1831,7 +1867,7 @@ class ModuleMain : IXposedHookLoadPackage {
         safeHook("XpModeEnable") { hookXpModeEnable(cl) }
         safeHook("Mode0Binder") { hookMode0Binder(cl) }
         safeHook("AgreementDialog") { hookAgreementDialog(cl) }
-        log("[FL] All hooks installed (v40: server-side GNSS injection + SELinux + agreement + step + enforcement + mock flag strip + Mode0Binder)")
+        log("[FL] All hooks installed (v41: proactive service_fl_ml + compat fixes + SELinux + agreement + step + enforcement + mock flag strip + Mode0Binder)")
 
         // Force BlacklistManager class initialization to trigger jed dex loading.
         triggerJedDexLoading(cl)
