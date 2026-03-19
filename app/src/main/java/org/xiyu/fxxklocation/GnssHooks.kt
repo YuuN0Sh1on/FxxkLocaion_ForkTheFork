@@ -140,10 +140,12 @@ internal fun ModuleMain.installActiveGnssFromServer() {
     var hooked = false
     for (clsName in candidates) {
         val cls = try { cl.loadClass(clsName) } catch (_: Throwable) { continue }
-        // Hook any method that takes IGnssStatusListener
+        // Hook any method that takes IGnssStatusListener (except unregister/remove)
         for (m in cls.declaredMethods) {
             val hasListener = m.parameterTypes.any { listenerCls.isAssignableFrom(it) }
             if (!hasListener) continue
+            val nameLC = m.name.lowercase()
+            if (nameLC.contains("unregister") || nameLC.contains("remove")) continue
             try {
                 XposedBridge.hookMethod(m, object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {

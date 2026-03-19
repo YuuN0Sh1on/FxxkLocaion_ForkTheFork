@@ -276,6 +276,15 @@ private fun ModuleMain.patchSelinuxAsync() {
             if (!success) {
                 log("[FL] SELinux policy patch failed — service connection may fail")
             }
+            // Enable sensor data injection at HAL level via root
+            // This allows system_server's SensorManager.injectSensorData() to work
+            try {
+                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "service call sensorservice 3 i32 1"))
+                val exit = p.waitFor()
+                log("[FL] sensorservice data injection enable: exit=$exit")
+            } catch (e: Throwable) {
+                log("[FL] sensorservice enable failed: $e")
+            }
         } catch (e: Throwable) {
             log("[FL] patchSelinuxAsync error: $e")
         }

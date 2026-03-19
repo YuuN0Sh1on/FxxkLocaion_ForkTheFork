@@ -3,11 +3,12 @@ package org.xiyu.fxxklocation
 import android.app.Application
 import android.content.Context
 import de.robv.android.xposed.IXposedHookLoadPackage
+import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
 
-class ModuleMain : IXposedHookLoadPackage {
+class ModuleMain : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
     @Volatile internal var hooked = false
     @Volatile internal var sysHooked = false
@@ -19,6 +20,11 @@ class ModuleMain : IXposedHookLoadPackage {
     internal val sysGnssListeners = java.util.concurrent.CopyOnWriteArrayList<Any>()
     @Volatile internal var sysGnssFeederStarted = false
     @Volatile internal var sysClassLoader: ClassLoader? = null
+
+    override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
+        log("[ZYGOTE] initZygote: installing global step sensor hook")
+        ZygoteStepHook.install()
+    }
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         log("[INIT] pkg=${lpparam.packageName} proc=${lpparam.processName}")
