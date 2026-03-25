@@ -22,105 +22,39 @@ class MainActivity : Activity() {
             setPadding(64, 80, 64, 80)
         }
 
-        // Title
+        // Title: Name + Version
         layout.addView(TextView(this).apply {
-            text = "FxxkLocation"
-            textSize = 28f
+            text = "FxxkLocation v1.0.0"
+            textSize = 26f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.parseColor("#1B5E20"))
             gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 48)
         })
 
-        // Version
-        layout.addView(TextView(this).apply {
-            text = "v1.0.0"
-            textSize = 14f
-            setTextColor(Color.GRAY)
-            gravity = Gravity.CENTER
-            setPadding(0, 8, 0, 48)
-        })
-
-        // Credits
-        val credits = listOf(
-            "作者" to "Mai_xiyu",
-            "贡献者" to "Osilvfe",
-            "贡献者" to "Claude Opus 4.6",
-        )
-        for ((role, name) in credits) {
-            layout.addView(TextView(this).apply {
-                text = "$role：$name"
-                textSize = 17f
-                setTextColor(Color.parseColor("#333333"))
-                setPadding(0, 16, 0, 8)
-            })
-        }
-
-        // Acknowledgments
-        layout.addView(TextView(this).apply {
-            setPadding(0, 48, 0, 0)
-            text = "鸣谢"
-            textSize = 20f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.parseColor("#1B5E20"))
-        })
-        layout.addView(TextView(this).apply {
-            text = "感谢 Lerist 制作 FakeLocation\n" +
-                    "感谢 52pojie.cn 提供的部分脱壳教程\n" +
-                    "感谢 Layout Inspect 及作者提供脱壳"
-            textSize = 15f
-            setTextColor(Color.parseColor("#555555"))
-            setPadding(0, 16, 0, 0)
-            setLineSpacing(8f, 1f)
-        })
-
-        // Usage Guide
-        layout.addView(TextView(this).apply {
-            setPadding(0, 48, 0, 0)
-            text = "使用方法"
-            textSize = 20f
-            setTypeface(null, Typeface.BOLD)
-            setTextColor(Color.parseColor("#1B5E20"))
-        })
-
-        val guideItems = listOf(
-            "① LSPosed/LSPatch 配置" to
-                "• 安装模块后，在 LSPosed 管理器中启用本模块\n" +
-                "• 勾选作用域：「系统框架」+「FakeLocation」\n" +
-                "• 不需要勾选目标应用（如小步点等），模块会自动处理\n" +
-                "• 修改作用域后需要重启设备生效",
-
-            "② Root 管理器配置" to
-                "• KernelSU/Magisk/APatch：授予「FakeLocation」超级用户权限\n" +
-                "• FxxkLocation 本身不需要 Root 权限\n" +
-                "• 模块会借助 FakeLocation 的 Root 自动配置 SELinux 策略",
-
-            "③ FakeLocation 使用" to
-                "• 打开 FakeLocation，选择模式 0（推荐）\n" +
-                "• 设置目标位置或路线，点击「启动模拟」\n" +
-                "• 路线模拟：添加路线后开启「循环」，点击启动\n" +
-                "• 步频模拟：FL 会自动同步步频到目标应用",
-
-            "④ 注意事项" to
-                "• 每次更新模块后需要重启设备\n" +
-                "• 如果 FakeLocation 提示服务连接失败，重启设备即可\n" +
-                "• 本模块已内置 Pro 功能，无需登录\n" +
-                "• 协议弹窗会自动跳过"
+        // Readme & Disclaimer Content
+        val readmeSections = listOf(
+            "⚠️ 核心声明" to "本项目及所有相关模块仅供个人学习、Android 逆向工程研究以及安全防御机制分析使用。\n\n本项目旨在探讨“本地权限与布尔值校验”的脆弱性，通过 Hook 技术演示本地鉴权的绕过方式，以此提醒开发者采用更安全的鉴权方案。\n\n请于下载测试后 24 小时内自觉删除。不可倒卖该资源，不可用于盈利，不可在中国大陆区域传播。",
+            "⚖️ 权利与下架通知" to "本项目纯属个人对逆向技术的兴趣探索。若本模块对您的知识产权或商业权益造成了实质性侵害，请随时通过以下邮箱联系我：\n\nmaixiyumc@gmail.com\n\n我将在收到权利人的有效通知后，第一时间核实并下架/删除本项目的所有相关代码与模块产物。",
+            "🚫 严禁违规用途" to "请勿将本模块用于校园跑软件、企业签到打卡、网约车抢单、LBS 游戏作弊等任何违规、违法或损害他人利益的场景。\n\n责任归属：由于滥用本模块所引发的目标应用账号封禁、法律纠纷或任何形式的经济/权益损失，概由使用者自行承担。Fakelocation 原作者及受损方有权向您追究责任。本模块作者概不负责。",
+            "🛠️ 设备风险提示" to "Xposed/LSPosed 模块对系统底层的修改具有一定风险，可能会引起应用闪退（Crash）、系统软重启（Soft Reboot）或卡开机动画（Bootloop）。请确保您具备基本的“救砖”能力（如通过 ADB 或 Recovery 终端禁用模块）。"
         )
 
-        for ((title, content) in guideItems) {
+        for ((title, content) in readmeSections) {
+            // Section Title
             layout.addView(TextView(this).apply {
                 text = title
-                textSize = 16f
+                textSize = 18f
                 setTypeface(null, Typeface.BOLD)
-                setTextColor(Color.parseColor("#2E7D32"))
-                setPadding(0, 32, 0, 4)
+                setTextColor(Color.parseColor("#D32F2F")) // 红色警告色
+                setPadding(0, 32, 0, 12)
             })
+            // Section Body
             layout.addView(TextView(this).apply {
                 text = content
-                textSize = 14f
-                setTextColor(Color.parseColor("#555555"))
-                setPadding(24, 4, 0, 0)
-                setLineSpacing(6f, 1f)
+                textSize = 15f
+                setTextColor(Color.parseColor("#424242"))
+                setLineSpacing(8f, 1.2f)
             })
         }
 
