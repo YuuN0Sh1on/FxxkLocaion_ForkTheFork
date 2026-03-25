@@ -1,6 +1,8 @@
 # FxxkLocaion
 绕过Fakelocation Pro验证获取永久Pro，且绕过黑名单验证并添加GNSS Hook精准定位使其部分严格检测GPS应用接受模拟定位结果的Lsposed模块
 
+模块仓库：https://github.com/Xposed-Modules-Repo/org.xiyu.fxxklocation
+
 一个基于 **LSPosed** 的辅助模块，用于绕过 FakeLocation Pro 验证、绕过黑名单校验，并通过 **GNSS Hook** 提升定位模拟的兼容性与精度，使部分严格检测 GPS 的应用也能接受模拟定位结果。
 
 ## 项目简介
